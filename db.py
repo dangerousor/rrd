@@ -148,3 +148,15 @@ class DBWorker:
 
     def get_session(self):
         return self.DBsession()
+
+    def insert(self, table):
+        session = self.get_session()
+        session.add(table)
+        session.commit()
+        session.close()
+
+    def insert_all(self, tables):
+        session = self.get_session()
+        session.add_all(tables)
+        session.commit()
+        session.close()

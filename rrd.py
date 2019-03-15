@@ -8,12 +8,14 @@ import requests
 import re
 
 from rd import r
+from db import Borrower, Investment, Loan, Loanrepayment, DBWorker
 
 
 class Spider:
     url = 'https://renrendai.com/'
     header = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/72.0.3626.119 Safari/537.36'}
     session = requests.session()
+    dbWorker = DBWorker()
 
     def __init__(self):
         cookies = http.cookiejar.LWPCookieJar()
@@ -49,7 +51,7 @@ class Spider:
             time.sleep(1)
 
     def step1(self, loan_id: str):
-        response = self.get_html(base_url='https://renrendai.com/'+loan_id)
+        response = self.get_html(base_url='https://renrendai.com/' + loan_id)
         if response.status_code == 302:
             print(302)
             return 302
@@ -67,14 +69,25 @@ class Spider:
             print(response.status_code)
             return response.status_code
 
-    @staticmethod
-    def step1_save(result):
+    def step1_save(self, result):
         loan = result['loan']
         user = result['borrower']
         record = result['userLoanRecord']
-        loan_data = [str(each) for each in [loan['loanId'], user['userId'], loan['title'], loan['amount'], loan['interest'], loan['months'], time.strftime('%Y-%m-%d', time.localtime(int(loan['readyTime'] / 1000))), loan['interestPerShare'], user['creditLevel'], loan['repayType'],
-                                            result['repaySource'],
-                                            loan['leftMonths'], loan['status']]]
+        loan_data = Loan(
+            loanId=loan['loanId'],
+            userId=user['userId'],
+            title=loan['title'],
+            amount=loan['amount'],
+            interest=loan['interest'],
+            months=loan['months'],
+            readyTime=time.localtime(int(loan['readyTime'] / 1000)),
+            interestPerShare=loan['interestPerShare'],
+            creditLevel=user['creditLevel'],
+            repayType=loan['repayType'],
+            repaySource=result['repaySource'],
+            leftMonths=loan['leftMonths'],
+            status=loan['status'],
+        )
         borrower = []
         try:
             borrower.append(str(user['userId']))
@@ -184,6 +197,37 @@ class Spider:
             borrower.append(str(record['overdueTotalAmount']))
         except:
             borrower.append('')
+        self.dbWorker.insert(loan_data)
+        borrower_data = Borrower(
+            userId=borrower[0],
+            nickName=borrower[1],
+            realName=borrower[2],
+            idNo=borrower[3],
+            gender=borrower[4],
+            mobile=borrower[5],
+            birthDay=borrower[6],
+            graduation=borrower[7],
+            marriage=borrower[8],
+            salary=borrower[9],
+            hasHouse=borrower[10],
+            hasCar=borrower[11],
+            houseLoan=borrower[12],
+            carLoan=borrower[13],
+            officeDomain=borrower[14],
+            city=borrower[15],
+            workYears=borrower[16],
+            auditItems=borrower[17],
+            totalCount=borrower[18],
+            successCount=borrower[19],
+            alreadyPayCount=borrower[20],
+            borrowAmount=borrower[21],
+            notPayPrincipal=borrower[22],
+            notPayTotalAmount=borrower[23],
+            overdueAmount=borrower[24],
+            overdueCount=borrower[25],
+            overdueTotalAmount=borrower[26],
+        )
+        self.dbWorker.insert(borrower_data)
         # with open('loan.csv', 'ab+') as f:
         #     # f.write('loanId,userId,title,amount,interest,months,readyTime,interestPerShare,creditLevel,repayType,repaySource,leftMonths,status\n'.encode())
         #     f.write(','.join(loan_data).encode())
@@ -194,7 +238,7 @@ class Spider:
         #     f.write('\n'.encode())
 
     def step2(self, loan_id):
-        response = self.get_html('https://renrendai.com/transfer/detail/loanInvestment?loanId='+loan_id)
+        response = self.get_html('https://renrendai.com/transfer/detail/loanInvestment?loanId=' + loan_id)
         if response.status_code != 200:
             print(response.status_code)
             pass
@@ -202,19 +246,28 @@ class Spider:
             self.step2_save(json.loads(response.content.decode()))
             pass
 
-    @staticmethod
-    def step2_save(result):
+    def step2_save(self, result):
         if result['status'] != 0:
             print(result['message'])
             return
-        with open('loanInvestment.csv', 'ab+') as f:
-            # f.write('loanId,userId,userNickName,amount,lendTime\n'.encode())
-            for each in result['data']['list']:
-                f.write(','.join([str(each['loanId']), str(each['userId']), each['userNickName'], str(each['amount']), time.strftime('%Y-%m-%d %H:%M', time.localtime(int(each['lendTime'] / 1000)))]).encode())
-                f.write('\n'.encode())
+        # with open('loanInvestment.csv', 'ab+') as f:
+        #         #     # f.write('loanId,userId,userNickName,amount,lendTime\n'.encode())
+        #         #     for each in result['data']['list']:
+        #         #         f.write(','.join([str(each['loanId']), str(each['userId']), each['userNickName'], str(each['amount']), time.strftime('%Y-%m-%d %H:%M', time.localtime(int(each['lendTime'] / 1000)))]).encode())
+        #         #         f.write('\n'.encode())
+        investments = []
+        for each in result['data']['list']:
+            investments.append(Investment(
+                loanId=each['loanId'],
+                userId=each['userId'],
+                userNickName=each['userNickName'],
+                amount=each['amount'],
+                lendTime=time.localtime(int(each['lendTime']/1000)),
+            ))
+            self.dbWorker.insert_all(investments)
 
     def step3(self, loan_id):
-        response = self.get_html('https://renrendai.com/transfer/detail/loanTransferred?loanId='+loan_id)
+        response = self.get_html('https://renrendai.com/transfer/detail/loanTransferred?loanId=' + loan_id)
         if response.status_code != 200:
             print(response.status_code)
             pass
@@ -222,21 +275,35 @@ class Spider:
             self.step3_save(loan_id, json.loads(response.content.decode()))
             pass
 
-    @staticmethod
-    def step3_save(loan_id, result):
+    def step3_save(self, loan_id, result):
         if result['status'] != 0:
             print(result['message'])
             return
-        with open('loanTransferred.csv', 'ab+') as f:
-            # f.write('loan_id,repayTime,repayType,unRepaidAmount,repaidFee,actualRepayTime\n'.encode())
-            for each in result['data']['list']:
-                temp = [str(loan_id), time.strftime('%Y-%m-%d', time.localtime(int(each['repayTime'] / 1000))), each['repayType'], str(each['unRepaidAmount']), str(each['repaidFee'])]
-                if each['actualRepayTime']:
-                    temp.append(time.strftime('%Y-%m-%d', time.localtime(int(each['actualRepaidTime'] / 1000))))
-                else:
-                    temp.append('')
-                f.write(','.join(temp).encode())
-                f.write('\n'.encode())
+        loanrepayments = []
+        for each in result['data']['list']:
+            if each['actualRepayTIme']:
+                temp = time.localtime(int(each['actualRepayTime']/1000))
+            else:
+                temp = None
+            loanrepayments.append(Loanrepayment(
+                loanId=int(loan_id),
+                repayTime=time.localtime(int(each['repayTime']/1000)),
+                repayType=each['repayType'],
+                unRepaidAmount=each['unRepaidAmount'],
+                repaidFee=each['repaidFee'],
+                actualRepayTime=temp,
+            ))
+        self.dbWorker.insert_all(loanrepayments)
+        # with open('loanTransferred.csv', 'ab+') as f:
+        #     # f.write('loan_id,repayTime,repayType,unRepaidAmount,repaidFee,actualRepayTime\n'.encode())
+        #     for each in result['data']['list']:
+        #         temp = [str(loan_id), time.strftime('%Y-%m-%d', time.localtime(int(each['repayTime'] / 1000))), each['repayType'], str(each['unRepaidAmount']), str(each['repaidFee'])]
+        #         if each['actualRepayTime']:
+        #             temp.append(time.strftime('%Y-%m-%d', time.localtime(int(each['actualRepaidTime'] / 1000))))
+        #         else:
+        #             temp.append('')
+        #         f.write(','.join(temp).encode())
+        #         f.write('\n'.encode())
 
     def run(self, ids):
         id_list = self.parse_ids(ids)
