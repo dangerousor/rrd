@@ -88,9 +88,12 @@ class Spider:
             leftMonths=loan['leftMonths'],
             status=loan['status'],
         )
+        self.dbWorker.insert(loan_data)
         borrower = []
         try:
             borrower.append(str(user['userId']))
+            if self.dbWorker.search(Borrower.userId == user['userId']):
+                return
         except:
             borrower.append('')
         try:
@@ -197,7 +200,6 @@ class Spider:
             borrower.append(str(record['overdueTotalAmount']))
         except:
             borrower.append('')
-        self.dbWorker.insert(loan_data)
         borrower_data = Borrower(
             userId=borrower[0],
             nickName=borrower[1],
@@ -249,7 +251,7 @@ class Spider:
     def step2_save(self, result):
         if result['status'] != 0:
             print(result['message'])
-            return
+            exit(2)
         # with open('loanInvestment.csv', 'ab+') as f:
         #         #     # f.write('loanId,userId,userNickName,amount,lendTime\n'.encode())
         #         #     for each in result['data']['list']:
@@ -278,7 +280,7 @@ class Spider:
     def step3_save(self, loan_id, result):
         if result['status'] != 0:
             print(result['message'])
-            return
+            exit(3)
         loanrepayments = []
         for each in result['data']['list']:
             if each['actualRepayTime']:

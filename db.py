@@ -66,6 +66,7 @@ from sqlalchemy import Column, Date, DateTime, Float, String, Text, create_engin
 from sqlalchemy.dialects.mysql import INTEGER
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.sql import exists
 
 Base = declarative_base()
 metadata = Base.metadata
@@ -162,3 +163,14 @@ class DBWorker:
         session.add_all(tables)
         session.commit()
         session.close()
+
+    def search(self, params):
+        session = self.get_session()
+        res = session.query(exists().where(params)).scalar()
+        session.close()
+        return res
+
+
+if __name__ == '__main__':
+    dbWorker = DBWorker()
+    print(dbWorker.search(Borrower.userId == '13220263'))
