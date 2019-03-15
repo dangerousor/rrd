@@ -106,7 +106,8 @@ class Borrower(Base):
 class Investment(Base):
     __tablename__ = 'investment'
 
-    loanId = Column(INTEGER(11), primary_key=True)
+    index = Column(INTEGER(11), primary_key=True, unique=True, autoincrement=True)
+    loanId = Column(INTEGER(11))
     userId = Column(INTEGER(11))
     userNickName = Column(Text)
     amount = Column(INTEGER(11))
@@ -122,7 +123,7 @@ class Loan(Base):
     amount = Column(INTEGER(11))
     interest = Column(Float)
     months = Column(INTEGER(11))
-    readyTime = Column(Date)
+    readyTime = Column(DateTime)
     interestPerShare = Column(Float)
     creditLevel = Column(String(8))
     repayType = Column(INTEGER(11))
@@ -134,8 +135,9 @@ class Loan(Base):
 class Loanrepayment(Base):
     __tablename__ = 'loanrepayment'
 
-    loanId = Column(INTEGER(11), primary_key=True)
-    repayTime = Column(Date)
+    index = Column(INTEGER(11), primary_key=True, unique=True, autoincrement=True)
+    loanId = Column(INTEGER(11))
+    repayTime = Column(DateTime)
     repayType = Column(Text)
     unRepaidAmount = Column(Float)
     repaidFee = Column(Float)

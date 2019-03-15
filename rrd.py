@@ -19,11 +19,11 @@ class Spider:
 
     def __init__(self):
         cookies = http.cookiejar.LWPCookieJar()
-        cookies.load('cookies', ignore_discard=True, ignore_expires=True)
         # 使用浏览器cookies来导入
         # self.__get_cookie()
         # noinspection PyBroadException
         try:
+            cookies.load('cookies', ignore_discard=True, ignore_expires=True)
             self.session.cookies = cookies
             self.__make_sure_login()
         except Exception:
@@ -281,7 +281,7 @@ class Spider:
             return
         loanrepayments = []
         for each in result['data']['list']:
-            if each['actualRepayTIme']:
+            if each['actualRepayTime']:
                 temp = time.localtime(int(each['actualRepayTime']/1000))
             else:
                 temp = None
@@ -306,12 +306,18 @@ class Spider:
         #         f.write('\n'.encode())
 
     def run(self, ids):
-        id_list = self.parse_ids(ids)
-        for each in id_list:
+        while True:
+            each = r.spop('yet')
+            if not each:
+                print('done')
+                return
+            else:
+                each = each.decode()
             print(each)
             self.step1('loan-' + each + '.html')
             self.step2(each)
             self.step3(each)
+            r.sadd('done', int(each))
             time.sleep(1)
 
     def __make_sure_login(self):
