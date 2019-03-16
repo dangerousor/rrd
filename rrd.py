@@ -1,5 +1,6 @@
 #!/usr/bin/python
 # -*- coding:utf-8 -*-
+import base64
 import http.cookiejar
 import json
 import time
@@ -9,6 +10,7 @@ import re
 
 from rd import r
 from db import Borrower, Investment, Loan, Loanrepayment, DBWorker
+from users import users
 
 
 class Spider:
@@ -18,13 +20,12 @@ class Spider:
     dbWorker = DBWorker()
 
     def __init__(self):
-        cookies = http.cookiejar.LWPCookieJar()
+        self.session.cookies = http.cookiejar.LWPCookieJar('cookies')
         # 使用浏览器cookies来导入
         # self.__get_cookie()
         # noinspection PyBroadException
         try:
-            cookies.load('cookies', ignore_discard=True, ignore_expires=True)
-            self.session.cookies = cookies
+            self.session.cookies.load(ignore_discard=True)
             self.__make_sure_login()
         except Exception:
             print('cookies load fail, wait for login...')
@@ -38,6 +39,11 @@ class Spider:
         if header is None:
             header = self.header
         return self.session.get(base_url, headers=header, timeout=30)
+
+    def post_html(self, url, data=None, header=None):
+        if header is None:
+            header = self.header
+        return self.session.post(url, headers=header, data=data)
 
     def step0(self):
         for i in range(50):
@@ -240,18 +246,24 @@ class Spider:
         #     f.write('\n'.encode())
 
     def step2(self, loan_id):
-        response = self.get_html('https://renrendai.com/transfer/detail/loanInvestment?loanId=' + loan_id)
-        if response.status_code != 200:
-            print(response.status_code)
-            pass
-        else:
-            self.step2_save(json.loads(response.content.decode()))
-            pass
+        while True:
+            response = self.get_html('https://renrendai.com/transfer/detail/loanInvestment?loanId=' + loan_id)
+            if response.status_code != 200:
+                # {"status":1001,"message":"用户未登录, 或者登录状态已过期"}
+                print(response.status_code)
+                pass
+            else:
+                res = json.loads(response.content.decode())
+                if res['status'] != 0:
+                    if res['status'] == 1001:
+                        self.__make_sure_login()
+                    else:
+                        print(res)
+                        exit(2)
+                self.step2_save(res)
+                return
 
     def step2_save(self, result):
-        if result['status'] != 0:
-            print(result['message'])
-            exit(2)
         # with open('loanInvestment.csv', 'ab+') as f:
         #         #     # f.write('loanId,userId,userNickName,amount,lendTime\n'.encode())
         #         #     for each in result['data']['list']:
@@ -269,13 +281,21 @@ class Spider:
             self.dbWorker.insert_all(investments)
 
     def step3(self, loan_id):
-        response = self.get_html('https://renrendai.com/transfer/detail/loanTransferred?loanId=' + loan_id)
-        if response.status_code != 200:
-            print(response.status_code)
-            pass
-        else:
-            self.step3_save(loan_id, json.loads(response.content.decode()))
-            pass
+        while True:
+            response = self.get_html('https://renrendai.com/transfer/detail/loanTransferred?loanId=' + loan_id)
+            if response.status_code != 200:
+                print(response.status_code)
+                pass
+            else:
+                res = json.loads(response.content.decode())
+                if res['status'] != 0:
+                    if res['status'] == 1001:
+                        self.__make_sure_login()
+                    else:
+                        print(res)
+                        exit(3)
+                self.step3_save(loan_id, res)
+                return
 
     def step3_save(self, loan_id, result):
         if result['status'] != 0:
@@ -307,7 +327,7 @@ class Spider:
         #         f.write(','.join(temp).encode())
         #         f.write('\n'.encode())
 
-    def run(self, ids):
+    def run(self):
         while True:
             each = r.spop('yet')
             if not each:
@@ -323,7 +343,7 @@ class Spider:
             time.sleep(1)
 
     def __make_sure_login(self):
-        login = self.session.post('https://renrendai.com/p2p/bond/isShowBondOffDialog', headers=self.header).json()
+        login = self.post_html(url='https://renrendai.com/p2p/bond/isShowBondOffDialog').json()
         if login['message'] == 'not login':
             print('log in failed')
             self.__login()
@@ -332,26 +352,33 @@ class Spider:
             print('log in success')
 
     def __login(self):
-        word = input('please log in manually, then type "ok":\n')
-        if word == 'ok':
+        html = self.get_html('https://renrendai.com/passport/index/captcha')
+        base64_data = base64.b64encode(html.content)
+        captcha = 'data:image/jpeg;base64,' + base64_data.decode()
+        header_captcha = {
+            'appCode': '097CF01DC1CBCBAE95BEF83FFFFA9B29',
+            'appKey': 'AKID56N045Os4eKLH0qT7Jb9gt37utWg2y4ONx1B',
+            'appSecret': '64iswEpdq6ad9SoQ715fHnyk7z47Fa7Ogtf8ST93',
+        }
+        data_captcha = {
+            'v_pic': captcha,
+            'v_type': 'n4',
+        }
+        res = requests.post('http://apigateway.jianjiaoshuju.com/api/v_1/yzm.html', headers=header_captcha, data=data_captcha)
+        if res.json()['errCode'] != 0:
+            print(res.json())
+            exit(1)
+        data = {
+            'j_username': '13127861431',
+            'j_password': users['13127861431'],
+            'j_code': res.json()['v_code'],
+            'rememberme': 'on',
+            'targetUrl': '',
+            'returnUrl': '/user/account/p2p/index',
+        }
+        h = self.post_html(url='https://renrendai.com/passport/index/doLogin', data=data)
+        res = h.json()
+        if res['status'] == 0:
             return
         else:
-            self.__login_with_cookie()
-
-    def __login_with_cookie(self):
-        word = input('please log in manually and parse cookie, then type "ok":\n')
-        if word == 'ok':
-            with open('cookie', 'rb+') as f:
-                co = json.loads(f.read().decode())
-            cookie = {}
-            for each in co:
-                cookie[each['name']] = each['value']
-            print(cookie)
-            cookies = http.cookiejar.LWPCookieJar()
-            requests.utils.cookiejar_from_dict(cookie, cookies)
-            cookies.save('cookies', ignore_discard=True, ignore_expires=True)
-            self.session.cookies = cookies
-            print(self.session.cookies)
-            return
-        else:
-            self.__login_with_cookie()
+            print(res['message'])
