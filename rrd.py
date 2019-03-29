@@ -9,8 +9,8 @@ import requests
 import re
 
 from rd import r
-from db import Borrower, Investment, Loan, Loanrepayment, DBWorker
-from users import users
+from db import Borrower, Investment, Loan, Loanrepayment, DBWorker, Transfer
+from users import user
 
 
 class Spider:
@@ -20,16 +20,7 @@ class Spider:
     dbWorker = DBWorker()
 
     def __init__(self):
-        self.session.cookies = http.cookiejar.LWPCookieJar('cookies')
-        # 使用浏览器cookies来导入
-        # self.__get_cookie()
-        # noinspection PyBroadException
-        try:
-            self.session.cookies.load(ignore_discard=True)
-            self.__make_sure_login()
-        except Exception:
-            print('cookies load fail, wait for login...')
-            self.__make_sure_login()
+        self.__make_sure_login()
 
     @staticmethod
     def parse_ids(ids) -> [str]:
@@ -79,6 +70,10 @@ class Spider:
         loan = result['loan']
         user = result['borrower']
         record = result['userLoanRecord']
+        try:
+            ready_time = time.localtime(int(loan['readyTime'] / 1000))
+        except:
+            ready_time = None
         loan_data = Loan(
             loanId=loan['loanId'],
             userId=user['userId'],
@@ -86,7 +81,7 @@ class Spider:
             amount=loan['amount'],
             interest=loan['interest'],
             months=loan['months'],
-            readyTime=time.localtime(int(loan['readyTime'] / 1000)),
+            readyTime=ready_time,
             interestPerShare=loan['interestPerShare'],
             creditLevel=user['creditLevel'],
             repayType=loan['repayType'],
@@ -94,6 +89,11 @@ class Spider:
             leftMonths=loan['leftMonths'],
             status=loan['status'],
         )
+        try:
+            if self.dbWorker.search(Loan.loanId == loan['loanId']):
+                return -1
+        except:
+            return -1
         self.dbWorker.insert(loan_data)
         borrower = []
         try:
@@ -251,17 +251,17 @@ class Spider:
             if response.status_code != 200:
                 # {"status":1001,"message":"用户未登录, 或者登录状态已过期"}
                 print(response.status_code)
-                pass
-            else:
-                res = json.loads(response.content.decode())
-                if res['status'] != 0:
-                    if res['status'] == 1001:
-                        self.__make_sure_login()
-                    else:
-                        print(res)
-                        exit(2)
-                self.step2_save(res)
                 return
+            res = json.loads(response.content.decode())
+            if res['status'] != 0:
+                if res['status'] == 1001:
+                    self.__make_sure_login()
+                    continue
+                else:
+                    print(res)
+                    exit(2)
+            self.step2_save(res)
+            return
 
     def step2_save(self, result):
         # with open('loanInvestment.csv', 'ab+') as f:
@@ -285,17 +285,17 @@ class Spider:
             response = self.get_html('https://renrendai.com/transfer/detail/loanTransferred?loanId=' + loan_id)
             if response.status_code != 200:
                 print(response.status_code)
-                pass
-            else:
-                res = json.loads(response.content.decode())
-                if res['status'] != 0:
-                    if res['status'] == 1001:
-                        self.__make_sure_login()
-                    else:
-                        print(res)
-                        exit(3)
-                self.step3_save(loan_id, res)
                 return
+            res = json.loads(response.content.decode())
+            if res['status'] != 0:
+                if res['status'] == 1001:
+                    self.__make_sure_login()
+                    continue
+                else:
+                    print(res)
+                    exit(3)
+            self.step3_save(loan_id, res)
+            return
 
     def step3_save(self, loan_id, result):
         if result['status'] != 0:
@@ -327,19 +327,55 @@ class Spider:
         #         f.write(','.join(temp).encode())
         #         f.write('\n'.encode())
 
+    def step4(self, loan_id):
+        while True:
+            html = self.get_html('https://renrendai.com/transfer/detail/loanRepayment?loanId=%s' % loan_id)
+            if html.status_code != 200:
+                print(html.status_code)
+                return
+            res = json.loads(html.content.decode())
+            if res['status'] != 0:
+                if res['status'] == 1001:
+                    self.__make_sure_login()
+                    continue
+                else:
+                    print(res)
+                    exit(4)
+            self.step4_save(loan_id, res)
+            return
+
+    def step4_save(self, loan_id, result):
+        transfers = []
+        for each in result['data']['list']:
+            transfers.append(Transfer(
+                transfer_id=int(each['transferId']),
+                loanId=loan_id,
+                toUserId=each['toUserId'],
+                fromUserId=each['fromUserId'],
+                price=float(each['price']),
+                createTime=time.localtime(int(each['createTime']/1000)),
+            ))
+        self.dbWorker.insert_all(transfers)
+
     def run(self):
         while True:
             each = r.spop('yet')
+            # each = r.rpop('old')
             if not each:
                 print('done')
                 return
+                # print('sleep for 2h')
+                # time.sleep(2*60*60)
+                # continue
             else:
                 each = each.decode()
             print(each)
-            self.step1('loan-' + each + '.html')
+            if self.step1('loan-' + each + '.html') == -1:
+                continue
             self.step2(each)
             self.step3(each)
             r.sadd('done', int(each))
+            # r.zadd('old-done', {each: int(each)})
             time.sleep(1)
 
     def __make_sure_login(self):
@@ -369,8 +405,8 @@ class Spider:
             print(res.json())
             exit(1)
         data = {
-            'j_username': '13127861431',
-            'j_password': users['13127861431'],
+            'j_username': user['username'],
+            'j_password': user['password'],
             'j_code': res.json()['v_code'],
             'rememberme': 'on',
             'targetUrl': '',
@@ -382,3 +418,16 @@ class Spider:
             return
         else:
             print(res['message'])
+
+
+if __name__ == '__main__':
+    spider = Spider()
+    while True:
+        loanid = r.spop('old-transfer')
+        if not loanid:
+            print('done')
+            break
+        spider.step4(loanid.decode())
+        r.sadd('old-transfer-done', int(loanid))
+        print(loanid)
+        time.sleep(1)

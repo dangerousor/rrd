@@ -145,6 +145,17 @@ class Loanrepayment(Base):
     actualRepayTime = Column(Text)
 
 
+class Transfer(Base):
+    __tablename__ = 'transfer'
+
+    transfer_id = Column(INTEGER(11), primary_key=True)
+    loanId = Column(INTEGER(11))
+    toUserId = Column(Text)
+    fromUserId = Column(Text)
+    price = Column(Float)
+    createTime = Column(DateTime)
+
+
 class DBWorker:
     engine = create_engine("mysql+pymysql://%s:%s:%s/%s" % ("root", "Lh201903@rm-uf68k89dyx2957tf62o.mysql.rds.aliyuncs.com", "3306", "rrd"))
     DBsession = sessionmaker(bind=engine)

@@ -8,3 +8,8 @@ users = {
         '13122317558': 'xnQnj73bui2DG7mooLmnYW96aQvU++oOp1h68b+b0dENB2ZTzbW2WF9c/BamUoDPFWS3XOuL4TpGvQHZLjlnRo71B98JEkirCJWTa+VHXed4XrNJ8vEtrhMAsaYPfB9R/ZGXBQfAi/8dvtYSTFygp9A7XrxY3R08oHn1LcT124w=',
         '15755023683': 'SSMeAeNvYI5OD1+27C8lIWd2lzLe44J7LhG9H++shM3VgKWbOz9yz+vdrJ171wlfcNIjOpvfhJaV0q/eajnNFsSCJgUgyD6IMrlNoG342lQy6yI+yv9fvZEFGhpD/zFk9laMbsUvERSueld1/pj3scE5GWiFU0GrG5YIbMG2PYY=',
 }
+
+user = {
+        'username': '',
+        'password': users['username'],
+}
