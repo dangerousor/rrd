@@ -11,6 +11,7 @@ import re
 from rd import r
 from db import Borrower, Investment, Loan, Loanrepayment, DBWorker, Transfer
 from users import user
+from captcha import header_captcha
 
 
 class Spider:
@@ -391,11 +392,6 @@ class Spider:
         html = self.get_html('https://renrendai.com/passport/index/captcha')
         base64_data = base64.b64encode(html.content)
         captcha = 'data:image/jpeg;base64,' + base64_data.decode()
-        header_captcha = {
-            'appCode': '097CF01DC1CBCBAE95BEF83FFFFA9B29',
-            'appKey': 'AKID56N045Os4eKLH0qT7Jb9gt37utWg2y4ONx1B',
-            'appSecret': '64iswEpdq6ad9SoQ715fHnyk7z47Fa7Ogtf8ST93',
-        }
         data_captcha = {
             'v_pic': captcha,
             'v_type': 'n4',

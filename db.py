@@ -148,7 +148,8 @@ class Loanrepayment(Base):
 class Transfer(Base):
     __tablename__ = 'transfer'
 
-    transfer_id = Column(INTEGER(11), primary_key=True)
+    index = Column(INTEGER(11), primary_key=True, autoincrement=True)
+    transfer_id = Column(INTEGER(11))
     loanId = Column(INTEGER(11))
     toUserId = Column(Text)
     fromUserId = Column(Text)
